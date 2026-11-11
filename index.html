@@ -19,8 +19,8 @@ const SETTINGS = {
   title: "Quarter 2 singing check",
   teacher: "Mrs. Abramowski",
   maxSeconds: 90,          // recording stops itself after this
-  noteSeconds: 2,          // how long the starting note plays on the recording
-  noteRepeats: 2,          // how many times it plays before "Sing!"
+  noteSeconds: 2.5,        // how long the starting note rings
+  replaysAllowed: 2,       // extra "play my note again" presses while recording
   lines: [
     { id: "A", title: "Old Hundredth", level: "Steady",  start: "G4",
       abc: "X:1\nM:4/4\nL:1/4\nK:G\nG G F E | D2 G A | B B B A | G4 |]" },
@@ -98,10 +98,9 @@ button:disabled{opacity:.45; cursor:not-allowed}
 .line header{display:flex; justify-content:space-between; align-items:baseline; gap:1rem; flex-wrap:wrap}
 .line h3{margin:0; font:600 1.15rem "Bricolage Grotesque", system-ui, sans-serif}
 .level{font-size:.9rem; color:var(--soft)}
-.notation{overflow-x:auto; margin:.5rem 0}
+.notation{overflow-x:auto; margin:.6rem 0; background:#fff; color:#000; border-radius:8px; padding:.5rem}
 .notation svg{max-width:100%; height:auto}
-.notation svg path, .notation svg text{fill:var(--ink)}
-.notation svg .abcjs-staff, .notation svg .abcjs-bar, .notation svg .abcjs-stem{stroke:var(--ink)}
+body.recording #step1, body.recording #step2{opacity:.45; pointer-events:none}
 .fallback{font-family:ui-monospace,monospace; white-space:pre-wrap; font-size:.9rem; color:var(--soft)}
 
 .stage{display:grid; gap:1rem}
@@ -172,6 +171,7 @@ ol.upload li{margin:.25rem 0}
         <p class="cue" id="cue" aria-live="polite"></p>
         <div class="row">
           <button class="record" id="recBtn">Record</button>
+          <button id="againBtn" hidden>Play my note again</button>
           <button id="stopBtn" hidden>Stop</button>
         </div>
       </div>
@@ -210,7 +210,7 @@ ol.upload li{margin:.25rem 0}
   /* ---------- state ---------- */
   let picked = null, ctx = null, camStream = null, mixDest = null, recorder = null,
       chunks = [], blob = null, mime = "", ext = "webm", audioOnly = false,
-      timers = [], meterRAF = 0;
+      timers = [], meterRAF = 0, take = null, replaysLeft = 0;
 
   /* ---------- step 1 ---------- */
   const nameReady = () => $("first").value.trim() && $("last").value.trim() && $("grade").value;
@@ -240,21 +240,25 @@ ol.upload li{margin:.25rem 0}
     if (ctx.state === "suspended") ctx.resume();
     return ctx;
   }
-  // A soft, piano-ish tone: a few harmonics with a gentle fade.
+  // A soft piano-like key: quick strike, then a natural fade.
+  // Higher overtones die faster than the fundamental, like a real string.
   function playNote(hz, seconds, extraOut){
     const c = ensureCtx(), t = c.currentTime + 0.02;
-    const g = c.createGain();
-    g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.35, t + 0.03);
-    g.gain.setTargetAtTime(0.18, t + 0.1, 0.4);
-    g.gain.setTargetAtTime(0, t + seconds - 0.25, 0.08);
-    [[1,1],[2,0.35],[3,0.12]].forEach(([mult, amt]) => {
-      const o = c.createOscillator(), og = c.createGain();
-      o.type = "sine"; o.frequency.value = hz * mult; og.gain.value = amt;
-      o.connect(og).connect(g); o.start(t); o.stop(t + seconds + 0.3);
+    const out = c.createGain(); out.gain.value = 0.22;
+    const tone = c.createBiquadFilter(); tone.type = "lowpass"; tone.frequency.value = 2600;
+    [[1,1],[2,0.45],[3,0.2],[4,0.09],[5,0.04]].forEach(([n, amt]) => {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = "sine";
+      o.frequency.value = hz * n * Math.sqrt(1 + 0.0004 * n * n);  // slight string stretch
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(amt, t + 0.006);               // hammer strike
+      g.gain.setTargetAtTime(0, t + 0.006, 0.9 / n);                // ring and decay
+      g.gain.setTargetAtTime(0, t + seconds, 0.06);                 // key released
+      o.connect(g).connect(tone); o.start(t); o.stop(t + seconds + 0.4);
     });
-    g.connect(c.destination);
-    if (extraOut) g.connect(extraOut);   // also onto the recording
+    tone.connect(out);
+    out.connect(c.destination);
+    if (extraOut) out.connect(extraOut);   // also onto the recording
   }
   const shift = () => parseInt($("voice").value, 10);
 
@@ -309,7 +313,7 @@ ol.upload li{margin:.25rem 0}
       }
     }
     $("preview").srcObject = camStream;
-    $("preview").hidden = audioOnly;
+    document.querySelector("#camArea .video-wrap").hidden = audioOnly;
     $("startCam").hidden = true;
     $("camArea").hidden = false;
 
@@ -354,18 +358,30 @@ ol.upload li{margin:.25rem 0}
     recorder.onstop = finish;
     recorder.start(1000);
 
-    $("recBtn").hidden = true; $("stopBtn").hidden = false;
+    // Freeze what this recording is, so changing a choice later can't mislabel it
+    take = { line: picked, shift: shift(), audioOnly };
+    document.body.classList.add("recording");
+    replaysLeft = SETTINGS.replaysAllowed;
+    updateAgain();
+
+    $("recBtn").hidden = true; $("stopBtn").hidden = false; $("againBtn").hidden = replaysLeft < 1;
     $("badge").textContent = "Recording"; $("badge").classList.add("rec");
 
-    const hz = freq(picked.start, shift()), gap = 0.4;
-    let at = 0.6;
+    const hz = freq(take.line.start, take.shift);
     setCue("Listen…", "listen");
-    for (let i = 0; i < SETTINGS.noteRepeats; i++) {
-      timers.push(setTimeout(() => playNote(hz, SETTINGS.noteSeconds, mixDest), at * 1000));
-      at += SETTINGS.noteSeconds + gap;
-    }
-    timers.push(setTimeout(() => setCue("Sing!", "sing"), at * 1000));
+    timers.push(setTimeout(() => playNote(hz, SETTINGS.noteSeconds, mixDest), 600));
+    timers.push(setTimeout(() => setCue("Sing!", "sing"), 600 + SETTINGS.noteSeconds * 1000));
     timers.push(setTimeout(stop, SETTINGS.maxSeconds * 1000));
+  });
+
+  function updateAgain(){
+    $("againBtn").textContent = `Play my note again (${replaysLeft} left)`;
+    $("againBtn").disabled = replaysLeft < 1;
+  }
+  $("againBtn").addEventListener("click", () => {
+    if (replaysLeft < 1 || !take) return;
+    replaysLeft--; updateAgain();
+    playNote(freq(take.line.start, take.shift), SETTINGS.noteSeconds, mixDest);
   });
 
   function setCue(text, cls){ $("cue").textContent = text; $("cue").className = "cue " + (cls || ""); }
@@ -377,7 +393,9 @@ ol.upload li{margin:.25rem 0}
 
   function finish(){
     blob = new Blob(chunks, { type: mime || "video/webm" });
-    $("stopBtn").hidden = true; $("recBtn").hidden = false; $("recBtn").textContent = "Record again";
+    document.body.classList.remove("recording");
+    $("stopBtn").hidden = true; $("againBtn").hidden = true;
+    $("recBtn").hidden = false; $("recBtn").textContent = "Record again";
     $("badge").textContent = "Ready"; $("badge").classList.remove("rec");
     setCue("");
     const pb = $("playback");
@@ -391,7 +409,7 @@ ol.upload li{margin:.25rem 0}
   /* ---------- step 4: save ---------- */
   const clean = s => s.trim().replace(/[^A-Za-z0-9-]+/g, "");
   $("saveBtn").addEventListener("click", () => {
-    const name = `${clean($("last").value)}_${clean($("first").value)}_Gr${$("grade").value}_Line${picked.id}${audioOnly ? "_audio" : ""}.${ext}`;
+    const name = `${clean($("last").value)}_${clean($("first").value)}_Gr${$("grade").value}_Line${take.line.id}${take.audioOnly ? "_audio" : ""}.${ext}`;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
@@ -400,6 +418,7 @@ ol.upload li{margin:.25rem 0}
   });
   $("redoBtn").addEventListener("click", () => {
     $("step3").scrollIntoView({ behavior: "smooth" });
+    $("recBtn").focus({ preventScroll: true });
   });
 })();
 </script>
