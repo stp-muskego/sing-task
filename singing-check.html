@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Singing Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/abcjs/6.4.4/abcjs-basic-min.js"></script>
+<script>
+/* =====================================================================
+   SETTINGS FOR THE TEACHER — edit this block, nothing else.
+   Each line: a title, a level, the music in ABC notation, and the
+   starting note (letter + optional # or b + octave; middle C = C4).
+   The three lines below are public-domain PLACEHOLDERS.
+   ===================================================================== */
+const SETTINGS = {
+  title: "Quarter 2 singing check",
+  teacher: "Mrs. Abramowski",
+  maxSeconds: 90,          // recording stops itself after this
+  noteSeconds: 2,          // how long the starting note plays on the recording
+  noteRepeats: 2,          // how many times it plays before "Sing!"
+  lines: [
+    { id: "A", title: "Old Hundredth", level: "Steady",  start: "G4",
+      abc: "X:1\nM:4/4\nL:1/4\nK:G\nG G F E | D2 G A | B B B A | G4 |]" },
+    { id: "B", title: "Ode to Joy",    level: "Stretch", start: "E4",
+      abc: "X:1\nM:4/4\nL:1/4\nK:C\nE E F G | G F E D | C C D E | E3/2 D/ D2 |]" },
+    { id: "C", title: "Amazing Grace", level: "Challenge", start: "D4",
+      abc: "X:1\nM:3/4\nL:1/4\nK:G\nD | G2 B/G/ | B2 A | G2 E | D2 D | G2 B/G/ | B2 A/B/ | d3- | d2 |]" }
+  ]
+};
+</script>
+<style>
+:root{
+  --page:#F6F8FC; --surface:#FFFFFF; --ink:#1B2233; --soft:#56607A;
+  --staff:#3457A6; --staff-faint:#DCE4F4; --gold:#E3A21A; --gold-ink:#3A2A00;
+  --rec:#D2463C; --ok:#2E8A57; --line:#CBD4E6;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#121726; --surface:#1A2134; --ink:#E9EDF7; --soft:#A3ACC4;
+    --staff:#8FAEF2; --staff-faint:#26304A; --gold:#F0B43A; --gold-ink:#2A1E00;
+    --rec:#F06A5F; --ok:#5BC48A; --line:#33405E; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#121726; --surface:#1A2134; --ink:#E9EDF7; --soft:#A3ACC4;
+  --staff:#8FAEF2; --staff-faint:#26304A; --gold:#F0B43A; --gold-ink:#2A1E00;
+  --rec:#F06A5F; --ok:#5BC48A; --line:#33405E; color-scheme: dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; background:var(--page); color:var(--ink);
+  font:400 1.0625rem/1.55 "Atkinson Hyperlegible", system-ui, sans-serif;
+  /* five faint staff lines across the top of the page */
+  background-image:repeating-linear-gradient(to bottom, var(--staff-faint) 0 2px, transparent 2px 14px);
+  background-size:100% 70px; background-repeat:no-repeat;
+}
+main{max-width:46rem; margin:0 auto; padding:5.5rem 1.25rem 4rem}
+h1{font:800 clamp(2.2rem,6vw,3.4rem)/1.05 "Bricolage Grotesque", system-ui, sans-serif; margin:0 0 .4rem; letter-spacing:-.02em}
+.lede{color:var(--soft); margin:0 0 2.5rem; max-width:36rem}
+section.step{border-left:3px solid var(--line); padding:0 0 2.25rem 1.5rem; position:relative}
+section.step::before{
+  content:attr(data-n); position:absolute; left:-1.05rem; top:-.1rem;
+  width:1.9rem; height:1.9rem; border-radius:50%; display:grid; place-items:center;
+  background:var(--surface); border:3px solid var(--line); font-weight:700; font-size:.95rem;
+}
+section.step.done::before{background:var(--staff); border-color:var(--staff); color:var(--surface)}
+section.step.locked{opacity:.45}
+section.step.locked *{pointer-events:none}
+h2{font:600 1.45rem/1.2 "Bricolage Grotesque", system-ui, sans-serif; margin:0 0 .8rem}
+.hint{color:var(--soft); font-size:.95rem; margin:.25rem 0 1rem}
+label.field{display:block; font-weight:700; margin-bottom:.75rem}
+label.field input, label.field select{
+  display:block; margin-top:.3rem; width:100%; max-width:22rem; font:inherit; color:var(--ink);
+  background:var(--surface); border:2px solid var(--line); border-radius:8px; padding:.55rem .7rem;
+}
+.row{display:flex; flex-wrap:wrap; gap:.75rem 1.5rem}
+button{
+  font:700 1rem "Atkinson Hyperlegible", system-ui, sans-serif; cursor:pointer;
+  border:2px solid var(--staff); background:var(--surface); color:var(--staff);
+  border-radius:999px; padding:.6rem 1.15rem;
+}
+button.primary{background:var(--staff); color:var(--surface)}
+button:disabled{opacity:.45; cursor:not-allowed}
+:focus-visible{outline:3px solid var(--gold); outline-offset:3px}
+
+.lines{display:grid; gap:1rem}
+.line{
+  background:var(--surface); border:2px solid var(--line); border-radius:12px; padding:1rem 1.1rem;
+}
+.line.picked{border-color:var(--staff); box-shadow:0 0 0 3px var(--staff-faint)}
+.line header{display:flex; justify-content:space-between; align-items:baseline; gap:1rem; flex-wrap:wrap}
+.line h3{margin:0; font:600 1.15rem "Bricolage Grotesque", system-ui, sans-serif}
+.level{font-size:.9rem; color:var(--soft)}
+.notation{overflow-x:auto; margin:.5rem 0}
+.notation svg{max-width:100%; height:auto}
+.notation svg path, .notation svg text{fill:var(--ink)}
+.notation svg .abcjs-staff, .notation svg .abcjs-bar, .notation svg .abcjs-stem{stroke:var(--ink)}
+.fallback{font-family:ui-monospace,monospace; white-space:pre-wrap; font-size:.9rem; color:var(--soft)}
+
+.stage{display:grid; gap:1rem}
+.video-wrap{position:relative; background:#000; border-radius:12px; overflow:hidden; aspect-ratio:4/3; max-width:32rem}
+video{width:100%; height:100%; object-fit:cover; display:block}
+.video-wrap video.mirror{transform:scaleX(-1)}
+.badge{
+  position:absolute; left:.75rem; top:.75rem; padding:.3rem .7rem; border-radius:999px;
+  font-weight:700; font-size:.9rem; background:rgba(0,0,0,.6); color:#fff;
+}
+.badge.rec{background:var(--rec)}
+.cue{
+  font:800 clamp(1.6rem,5vw,2.4rem)/1.1 "Bricolage Grotesque", system-ui, sans-serif;
+  min-height:2.8rem; margin:0;
+}
+.cue.listen{color:var(--gold)}
+.cue.sing{color:var(--ok)}
+.meter{height:10px; max-width:32rem; background:var(--staff-faint); border-radius:999px; overflow:hidden}
+.meter span{display:block; height:100%; width:0; background:var(--ok); transition:width .08s linear}
+button.record{background:var(--rec); border-color:var(--rec); color:#fff; font-size:1.1rem; padding:.75rem 1.5rem}
+.msg{padding:.8rem 1rem; border-radius:10px; border:2px solid var(--rec); background:var(--surface); max-width:36rem}
+.msg.good{border-color:var(--ok)}
+.filename{font-family:ui-monospace,monospace; font-size:.92rem; word-break:break-all}
+ol.upload{padding-left:1.25rem; margin:.5rem 0 0}
+ol.upload li{margin:.25rem 0}
+[hidden]{display:none !important}
+@media (prefers-reduced-motion: reduce){ .meter span{transition:none} }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="pageTitle">Singing check</h1>
+  <p class="lede" id="lede">Pick a line you've practiced, hear your starting note, and record yourself singing. You'll save the video and turn it in on Google Classroom.</p>
+
+  <section class="step" data-n="1" id="step1">
+    <h2>Your name</h2>
+    <div class="row">
+      <label class="field">First name <input id="first" autocomplete="given-name"></label>
+      <label class="field">Last name <input id="last" autocomplete="family-name"></label>
+      <label class="field">Grade
+        <select id="grade"><option value="">Choose</option><option>6</option><option>7</option><option>8</option></select>
+      </label>
+    </div>
+  </section>
+
+  <section class="step locked" data-n="2" id="step2">
+    <h2>Pick your line</h2>
+    <p class="hint">Tap “Hear my note” as many times as you like. Pick the one you want to sing.</p>
+    <label class="field">My voice
+      <select id="voice">
+        <option value="0">Higher voice</option>
+        <option value="-12">Lower voice (one octave down)</option>
+      </select>
+    </label>
+    <div class="lines" id="lines"></div>
+  </section>
+
+  <section class="step locked" data-n="3" id="step3">
+    <h2>Record</h2>
+    <p class="hint">When you press Record, your starting note plays first, and it goes on the recording too. Sing after you see “Sing!”</p>
+    <div class="stage">
+      <button class="primary" id="startCam">Turn on camera and microphone</button>
+      <div class="msg" id="camError" hidden></div>
+      <div id="camArea" hidden>
+        <div class="video-wrap"><video id="preview" class="mirror" autoplay muted playsinline></video><span class="badge" id="badge">Ready</span></div>
+        <p class="hint" style="margin-top:.75rem">Microphone level. It should jump when you talk.</p>
+        <div class="meter" aria-hidden="true"><span id="meter"></span></div>
+        <p class="cue" id="cue" aria-live="polite"></p>
+        <div class="row">
+          <button class="record" id="recBtn">Record</button>
+          <button id="stopBtn" hidden>Stop</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="step locked" data-n="4" id="step4">
+    <h2>Check it and save it</h2>
+    <div id="reviewArea" hidden>
+      <div class="video-wrap"><video id="playback" controls playsinline></video></div>
+      <p class="hint">Watch it once. Can you hear your starting note at the beginning?</p>
+      <div class="row">
+        <button class="primary" id="saveBtn">Save my recording</button>
+        <button id="redoBtn">Record again</button>
+      </div>
+      <div class="msg good" id="savedMsg" hidden>
+        <strong>Saved.</strong> Your file is in your Downloads folder:
+        <div class="filename" id="fname"></div>
+        <ol class="upload">
+          <li>Open the singing check assignment in Google Classroom.</li>
+          <li>Click <strong>Add or create</strong>, then <strong>File</strong>.</li>
+          <li>Click <strong>Browse</strong>, open <strong>Downloads</strong>, and pick the file.</li>
+          <li>Click <strong>Turn in</strong>.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  document.title = SETTINGS.title;
+  $("pageTitle").textContent = SETTINGS.title;
+
+  /* ---------- state ---------- */
+  let picked = null, ctx = null, camStream = null, mixDest = null, recorder = null,
+      chunks = [], blob = null, mime = "", ext = "webm", audioOnly = false,
+      timers = [], meterRAF = 0;
+
+  /* ---------- step 1 ---------- */
+  const nameReady = () => $("first").value.trim() && $("last").value.trim() && $("grade").value;
+  ["first","last","grade"].forEach(id => $(id).addEventListener("input", refresh));
+
+  function refresh(){
+    const s1 = !!nameReady();
+    $("step1").classList.toggle("done", s1);
+    $("step2").classList.toggle("locked", !s1);
+    $("step2").classList.toggle("done", s1 && !!picked);
+    $("step3").classList.toggle("locked", !(s1 && picked));
+    $("step3").classList.toggle("done", !!blob);
+    $("step4").classList.toggle("locked", !blob);
+  }
+
+  /* ---------- notes ---------- */
+  function freq(note, shift){
+    const m = /^([A-Ga-g])([#b]?)(\d)$/.exec(note.trim());
+    if (!m) return 440;
+    const base = {C:0,D:2,E:4,F:5,G:7,A:9,B:11}[m[1].toUpperCase()];
+    const acc = m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0;
+    const midi = 12 * (parseInt(m[3],10) + 1) + base + acc + shift;
+    return 440 * Math.pow(2, (midi - 69) / 12);
+  }
+  function ensureCtx(){
+    if (!ctx) { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+    if (ctx.state === "suspended") ctx.resume();
+    return ctx;
+  }
+  // A soft, piano-ish tone: a few harmonics with a gentle fade.
+  function playNote(hz, seconds, extraOut){
+    const c = ensureCtx(), t = c.currentTime + 0.02;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.35, t + 0.03);
+    g.gain.setTargetAtTime(0.18, t + 0.1, 0.4);
+    g.gain.setTargetAtTime(0, t + seconds - 0.25, 0.08);
+    [[1,1],[2,0.35],[3,0.12]].forEach(([mult, amt]) => {
+      const o = c.createOscillator(), og = c.createGain();
+      o.type = "sine"; o.frequency.value = hz * mult; og.gain.value = amt;
+      o.connect(og).connect(g); o.start(t); o.stop(t + seconds + 0.3);
+    });
+    g.connect(c.destination);
+    if (extraOut) g.connect(extraOut);   // also onto the recording
+  }
+  const shift = () => parseInt($("voice").value, 10);
+
+  /* ---------- step 2: lines ---------- */
+  SETTINGS.lines.forEach(line => {
+    const card = document.createElement("article");
+    card.className = "line"; card.id = "line-" + line.id;
+    card.innerHTML = `
+      <header><h3>Line ${line.id}: ${line.title}</h3><span class="level">${line.level}</span></header>
+      <div class="notation" id="abc-${line.id}"></div>
+      <div class="row">
+        <button class="hear">Hear my note</button>
+        <button class="pick primary">Sing this one</button>
+      </div>`;
+    $("lines").appendChild(card);
+    const target = card.querySelector(".notation");
+    if (window.ABCJS) {
+      ABCJS.renderAbc(target, line.abc, { responsive: "resize", paddingtop: 0, paddingbottom: 0, staffwidth: 520 });
+    } else {
+      target.innerHTML = `<div class="fallback">The music couldn't load. Use the sheet from class.</div>`;
+    }
+    card.querySelector(".hear").addEventListener("click", () => playNote(freq(line.start, shift()), 1.6));
+    card.querySelector(".pick").addEventListener("click", () => {
+      picked = line;
+      document.querySelectorAll(".line").forEach(el => el.classList.remove("picked"));
+      card.classList.add("picked");
+      document.querySelectorAll(".line .pick").forEach(b => b.textContent = "Sing this one");
+      card.querySelector(".pick").textContent = "Picked";
+      refresh();
+      $("step3").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    });
+  });
+
+  /* ---------- step 3: camera, mic, recording ---------- */
+  const audioOpts = { echoCancellation:false, noiseSuppression:false, autoGainControl:false };
+
+  $("startCam").addEventListener("click", async () => {
+    ensureCtx();
+    $("camError").hidden = true;
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({
+        video: { width:{ideal:640}, height:{ideal:480}, facingMode:"user" }, audio: audioOpts });
+      audioOnly = false;
+    } catch (e) {
+      try {
+        camStream = await navigator.mediaDevices.getUserMedia({ audio: audioOpts });
+        audioOnly = true;
+        showError("The camera didn't turn on, so this will be a sound-only recording. Tell " + SETTINGS.teacher + " if that's a problem.", false);
+      } catch (e2) {
+        showError("The microphone is blocked. Click the camera icon in the address bar, choose Allow, and try again.", true);
+        return;
+      }
+    }
+    $("preview").srcObject = camStream;
+    $("preview").hidden = audioOnly;
+    $("startCam").hidden = true;
+    $("camArea").hidden = false;
+
+    // Mix mic + starting note into one audio track for the recording
+    const mic = ctx.createMediaStreamSource(camStream);
+    mixDest = ctx.createMediaStreamDestination();
+    mic.connect(mixDest);
+    const an = ctx.createAnalyser(); an.fftSize = 512; mic.connect(an);
+    const buf = new Uint8Array(an.fftSize);
+    const tick = () => {
+      an.getByteTimeDomainData(buf);
+      let peak = 0; for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
+      $("meter").style.width = Math.min(100, peak / 128 * 220) + "%";
+      meterRAF = requestAnimationFrame(tick);
+    };
+    tick();
+  });
+
+  function showError(text, hard){
+    $("camError").textContent = text;
+    $("camError").hidden = false;
+    $("camError").classList.toggle("good", !hard);
+  }
+
+  function pickMime(){
+    const opts = audioOnly
+      ? [["audio/mp4","m4a"],["audio/webm;codecs=opus","webm"],["audio/webm","webm"]]
+      : [["video/mp4;codecs=avc1,mp4a.40.2","mp4"],["video/mp4","mp4"],["video/webm;codecs=vp8,opus","webm"],["video/webm","webm"]];
+    for (const [m,x] of opts) if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return [m,x];
+    return ["", "webm"];
+  }
+
+  $("recBtn").addEventListener("click", () => {
+    if (!picked) return;
+    [mime, ext] = pickMime();
+    const tracks = [...mixDest.stream.getAudioTracks()];
+    if (!audioOnly) tracks.unshift(...camStream.getVideoTracks());
+    const stream = new MediaStream(tracks);
+    chunks = [];
+    recorder = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 1_000_000, audioBitsPerSecond: 128_000 } : {});
+    recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+    recorder.onstop = finish;
+    recorder.start(1000);
+
+    $("recBtn").hidden = true; $("stopBtn").hidden = false;
+    $("badge").textContent = "Recording"; $("badge").classList.add("rec");
+
+    const hz = freq(picked.start, shift()), gap = 0.4;
+    let at = 0.6;
+    setCue("Listen…", "listen");
+    for (let i = 0; i < SETTINGS.noteRepeats; i++) {
+      timers.push(setTimeout(() => playNote(hz, SETTINGS.noteSeconds, mixDest), at * 1000));
+      at += SETTINGS.noteSeconds + gap;
+    }
+    timers.push(setTimeout(() => setCue("Sing!", "sing"), at * 1000));
+    timers.push(setTimeout(stop, SETTINGS.maxSeconds * 1000));
+  });
+
+  function setCue(text, cls){ $("cue").textContent = text; $("cue").className = "cue " + (cls || ""); }
+  function stop(){
+    timers.forEach(clearTimeout); timers = [];
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+  }
+  $("stopBtn").addEventListener("click", stop);
+
+  function finish(){
+    blob = new Blob(chunks, { type: mime || "video/webm" });
+    $("stopBtn").hidden = true; $("recBtn").hidden = false; $("recBtn").textContent = "Record again";
+    $("badge").textContent = "Ready"; $("badge").classList.remove("rec");
+    setCue("");
+    const pb = $("playback");
+    if (pb.src) URL.revokeObjectURL(pb.src);
+    pb.src = URL.createObjectURL(blob);
+    $("reviewArea").hidden = false; $("savedMsg").hidden = true;
+    refresh();
+    $("step4").scrollIntoView({ behavior: "smooth" });
+  }
+
+  /* ---------- step 4: save ---------- */
+  const clean = s => s.trim().replace(/[^A-Za-z0-9-]+/g, "");
+  $("saveBtn").addEventListener("click", () => {
+    const name = `${clean($("last").value)}_${clean($("first").value)}_Gr${$("grade").value}_Line${picked.id}${audioOnly ? "_audio" : ""}.${ext}`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    $("fname").textContent = name; $("savedMsg").hidden = false;
+    $("step4").classList.add("done");
+  });
+  $("redoBtn").addEventListener("click", () => {
+    $("step3").scrollIntoView({ behavior: "smooth" });
+  });
+})();
+</script>
+</body>
+</html>
