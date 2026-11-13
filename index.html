@@ -16,9 +16,9 @@
    The three lines below are public-domain PLACEHOLDERS.
    ===================================================================== */
 const SETTINGS = {
-  title: "Quarter 2 singing check",
+  title: "Quarter 2 Singing Review",
   teacher: "Mrs. Abramowski",
-  maxSeconds: 90,          // recording stops itself after this
+  maxSeconds: 60,          // recording stops itself after this (keeps files small)
   noteSeconds: 2.5,        // how long the starting note rings
   replaysAllowed: 2,       // extra "play my note again" presses while recording
   lines: [
@@ -148,11 +148,11 @@ ol.upload li{margin:.25rem 0}
 
   <section class="step locked" data-n="2" id="step2">
     <h2>Pick your line</h2>
-    <p class="hint">Tap “Hear my note” as many times as you like. Pick the one you want to sing.</p>
+    <p class="hint">Tap “Hear my starting note” and choose which line to sing. Practice it a few times before recording below. You can hear your starting note as many times as you’d like.</p>
     <label class="field">My voice
       <select id="voice">
-        <option value="0">Higher voice</option>
-        <option value="-12">Lower voice (one octave down)</option>
+        <option value="0">Higher voice (all girls and some boys)</option>
+        <option value="-12">Lower voice (some boys)</option>
       </select>
     </label>
     <div class="lines" id="lines"></div>
@@ -160,9 +160,10 @@ ol.upload li{margin:.25rem 0}
 
   <section class="step locked" data-n="3" id="step3">
     <h2>Record</h2>
-    <p class="hint">When you press Record, your starting note plays first, and it goes on the recording too. Sing after you see “Sing!”</p>
+    <p class="hint">When you press Record, you will hear your starting note first. Sing after you see “Sing!” You can record for up to <span id="maxLabel">1 minute</span>.</p>
     <div class="stage">
       <button class="primary" id="startCam">Turn on camera and microphone</button>
+      <p class="hint" id="allowHint">If a box pops up asking to use your camera and microphone, choose <strong>Allow while visiting this site</strong>.</p>
       <div class="msg" id="camError" hidden></div>
       <div id="camArea" hidden>
         <div class="video-wrap"><video id="preview" class="mirror" autoplay muted playsinline></video><span class="badge" id="badge">Ready</span></div>
@@ -191,7 +192,7 @@ ol.upload li{margin:.25rem 0}
         <strong>Saved.</strong> Your file is in your Downloads folder:
         <div class="filename" id="fname"></div>
         <ol class="upload">
-          <li>Open the singing check assignment in Google Classroom.</li>
+          <li>Open the Quarter 2 Singing Review assignment in Google Classroom.</li>
           <li>Click <strong>Add or create</strong>, then <strong>File</strong>.</li>
           <li>Click <strong>Browse</strong>, open <strong>Downloads</strong>, and pick the file.</li>
           <li>Click <strong>Turn in</strong>.</li>
@@ -205,12 +206,13 @@ ol.upload li{margin:.25rem 0}
 (() => {
   const $ = id => document.getElementById(id);
   document.title = SETTINGS.title;
+  { const m = SETTINGS.maxSeconds; $("maxLabel").textContent = m % 60 ? `${m} seconds` : (m === 60 ? "1 minute" : `${m/60} minutes`); }
   $("pageTitle").textContent = SETTINGS.title;
 
   /* ---------- state ---------- */
   let picked = null, ctx = null, camStream = null, mixDest = null, recorder = null,
       chunks = [], blob = null, mime = "", ext = "webm", audioOnly = false,
-      timers = [], meterRAF = 0, take = null, replaysLeft = 0;
+      timers = [], clockTimer = 0, meterRAF = 0, take = null, replaysLeft = 0;
 
   /* ---------- step 1 ---------- */
   const nameReady = () => $("first").value.trim() && $("last").value.trim() && $("grade").value;
@@ -270,7 +272,7 @@ ol.upload li{margin:.25rem 0}
       <header><h3>Line ${line.id}: ${line.title}</h3><span class="level">${line.level}</span></header>
       <div class="notation" id="abc-${line.id}"></div>
       <div class="row">
-        <button class="hear">Hear my note</button>
+        <button class="hear">Hear my starting note</button>
         <button class="pick primary">Sing this one</button>
       </div>`;
     $("lines").appendChild(card);
@@ -314,7 +316,7 @@ ol.upload li{margin:.25rem 0}
     }
     $("preview").srcObject = camStream;
     document.querySelector("#camArea .video-wrap").hidden = audioOnly;
-    $("startCam").hidden = true;
+    $("startCam").hidden = true; $("allowHint").hidden = true;
     $("camArea").hidden = false;
 
     // Mix mic + starting note into one audio track for the recording
@@ -353,7 +355,7 @@ ol.upload li{margin:.25rem 0}
     if (!audioOnly) tracks.unshift(...camStream.getVideoTracks());
     const stream = new MediaStream(tracks);
     chunks = [];
-    recorder = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 1_000_000, audioBitsPerSecond: 128_000 } : {});
+    recorder = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 800_000, audioBitsPerSecond: 128_000 } : {});
     recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
     recorder.onstop = finish;
     recorder.start(1000);
@@ -365,13 +367,20 @@ ol.upload li{margin:.25rem 0}
     updateAgain();
 
     $("recBtn").hidden = true; $("stopBtn").hidden = false; $("againBtn").hidden = replaysLeft < 1;
-    $("badge").textContent = "Recording"; $("badge").classList.add("rec");
+    $("badge").classList.add("rec");
 
     const hz = freq(take.line.start, take.shift);
     setCue("Listen…", "listen");
     timers.push(setTimeout(() => playNote(hz, SETTINGS.noteSeconds, mixDest), 600));
     timers.push(setTimeout(() => setCue("Sing!", "sing"), 600 + SETTINGS.noteSeconds * 1000));
     timers.push(setTimeout(stop, SETTINGS.maxSeconds * 1000));
+    const began = Date.now();
+    const showLeft = () => {
+      const left = Math.max(0, SETTINGS.maxSeconds - Math.floor((Date.now() - began) / 1000));
+      $("badge").textContent = `Recording · ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} left`;
+    };
+    showLeft();
+    clockTimer = setInterval(showLeft, 250);
   });
 
   function updateAgain(){
@@ -386,7 +395,7 @@ ol.upload li{margin:.25rem 0}
 
   function setCue(text, cls){ $("cue").textContent = text; $("cue").className = "cue " + (cls || ""); }
   function stop(){
-    timers.forEach(clearTimeout); timers = [];
+    timers.forEach(clearTimeout); timers = []; clearInterval(clockTimer);
     if (recorder && recorder.state !== "inactive") recorder.stop();
   }
   $("stopBtn").addEventListener("click", stop);
